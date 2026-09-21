@@ -19,7 +19,9 @@ export const deliveryBoyAPI = {
   
   markPickedUp: (orderId) => api.put(`/delivery/orders/${orderId}/pickup`),  // ✅ Changed
   
-  markDelivered: (orderId) => api.put(`/delivery/orders/${orderId}/deliver`),  // ✅ Changed
+  markDelivered: (orderId) => api.put(`/delivery/orders/${orderId}/deliver`),  // ✅ Changed,
+    markCodPaid: (orderId) => api.put(`/delivery/orders/${orderId}/mark-paid`),
+
   
   // Admin endpoints
   getAllDeliveryBoys: (params = {}) => {

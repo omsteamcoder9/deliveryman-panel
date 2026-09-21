@@ -20,9 +20,11 @@ import {
   User,
   Calendar,
   Car,
-  Hash
+  Hash,
+  DollarSign
 } from 'lucide-react';
-import { FaTruck, FaClipboardList, FaCheckCircle, FaClock, FaMapMarkerAlt, FaPhone, FaEnvelope, FaTimesCircle, FaHashtag, FaCalendarAlt, FaUser, FaCar } from 'react-icons/fa';import toast from 'react-hot-toast';
+import { FaTruck, FaClipboardList, FaCheckCircle, FaClock, FaMapMarkerAlt, FaPhone, FaEnvelope, FaTimesCircle, FaHashtag, FaCalendarAlt, FaUser, FaCar, FaMoneyBillWave } from 'react-icons/fa';
+import toast from 'react-hot-toast';
 
 const Dashboard = () => {
   const { deliveryBoy, logout } = useAuth();
@@ -40,7 +42,6 @@ const Dashboard = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [updatingOrderId, setUpdatingOrderId] = useState(null);
 
-  // Fetch dashboard data
   const fetchDashboardData = async (showRefresh = false) => {
     try {
       if (showRefresh) {
@@ -90,21 +91,32 @@ const Dashboard = () => {
     }
   };
 
-  const handleDeliver = async (orderId) => {
-    const confirm = window.confirm('✅ Mark this order as delivered?');
-    if (!confirm) return;
-    
-    try {
-      setUpdatingOrderId(orderId);
-      await deliveryBoyAPI.markDelivered(orderId);
-      toast.success('Order delivered successfully!');
-      fetchDashboardData(true);
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to mark as delivered');
-    } finally {
-      setUpdatingOrderId(null);
-    }
-  };
+const handleDeliver = async (orderId) => {
+  try {
+    setUpdatingOrderId(orderId);
+    await deliveryBoyAPI.markDelivered(orderId);
+    toast.success('Order delivered successfully!');
+    fetchDashboardData(true);
+  } catch (error) {
+    toast.error(error.response?.data?.message || 'Failed to mark as delivered');
+  } finally {
+    setUpdatingOrderId(null);
+  }
+};
+
+// ✅ Mark COD payment as received (no confirm)
+const handleMarkCodPaid = async (orderId) => {
+  try {
+    setUpdatingOrderId(orderId);
+    await deliveryBoyAPI.markCodPaid(orderId);
+    toast.success('COD payment marked as received!');
+    fetchDashboardData(true);
+  } catch (error) {
+    toast.error(error.response?.data?.message || 'Failed to mark payment');
+  } finally {
+    setUpdatingOrderId(null);
+  }
+};
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-IN', {
@@ -146,7 +158,102 @@ const Dashboard = () => {
     );
   };
 
-  // View Order Details Modal
+  const getPaymentBadge = (paymentStatus, paymentMethod) => {
+    const method = (paymentMethod || '').toLowerCase();
+
+    if (method === 'cod') {
+      if (paymentStatus === 'completed') {
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide bg-green-100 text-green-800 border border-green-300">
+            💵 COD · PAID
+          </span>
+        );
+      }
+      if (paymentStatus === 'refunded') {
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide bg-purple-100 text-purple-800 border border-purple-300">
+            💵 COD · REFUNDED
+          </span>
+        );
+      }
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide bg-yellow-100 text-yellow-800 border border-yellow-300">
+          💵 COD · NOT PAID
+        </span>
+      );
+    }
+
+    if (method === 'razorpay') {
+      if (paymentStatus === 'completed') {
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide bg-green-100 text-green-800 border border-green-300">
+            💳 RAZORPAY · PAID
+          </span>
+        );
+      }
+      if (paymentStatus === 'refunded') {
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide bg-purple-100 text-purple-800 border border-purple-300">
+            💳 RAZORPAY · REFUNDED
+          </span>
+        );
+      }
+      if (paymentStatus === 'failed') {
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide bg-red-100 text-red-800 border border-red-300">
+            💳 RAZORPAY · FAILED
+          </span>
+        );
+      }
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide bg-yellow-100 text-yellow-800 border border-yellow-300">
+          💳 RAZORPAY · PENDING
+        </span>
+      );
+    }
+
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide bg-gray-100 text-gray-700 border border-gray-300">
+        {(paymentMethod || 'UNKNOWN').toUpperCase()} · {(paymentStatus || 'UNKNOWN').toUpperCase()}
+      </span>
+    );
+  };
+
+  const getLocationDisplay = (order) => {
+    if (order.wardId) {
+      return {
+        type: 'ward',
+        label: `Ward ${order.wardId}`,
+        name: order.wardName || `Ward ${order.wardId}`,
+        typedArea: order.typedArea || null,
+      };
+    }
+    return {
+      type: 'city',
+      label: order.shippingAddress?.city || '',
+      name: order.shippingAddress?.street || '',
+      typedArea: order.typedArea || null,
+    };
+  };
+
+  const getFullAddress = (order) => {
+    if (!order.shippingAddress) return '—';
+    
+    const parts = [];
+    const typed = (order.typedArea || '').trim();
+    const street = (order.shippingAddress.street || '').trim();
+    
+    if (typed && !street.toLowerCase().includes(typed.toLowerCase())) {
+      parts.push(typed);
+    }
+    if (street) parts.push(street);
+    if (order.shippingAddress.city) parts.push(order.shippingAddress.city);
+    if (order.shippingAddress.state) parts.push(order.shippingAddress.state);
+    if (order.shippingAddress.postalCode) parts.push(order.shippingAddress.postalCode);
+    
+    return parts.length > 0 ? parts.join(', ') : '—';
+  };
+
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showOrderModal, setShowOrderModal] = useState(false);
 
@@ -157,6 +264,8 @@ const Dashboard = () => {
 
   const OrderDetailsModal = ({ order, onClose }) => {
     if (!order) return null;
+
+    const loc = getLocationDisplay(order);
 
     return (
       <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
@@ -186,26 +295,47 @@ const Dashboard = () => {
                 </p>
               </div>
               <div>
-                <p className="text-xs text-gray-500">Order Status</p>
+                <p className="text-xs text-gray-500 mb-1">Order Status</p>
                 {getStatusBadge(order.deliveryStatus, order.orderStatus)}
               </div>
               <div>
-                <p className="text-xs text-gray-500">Payment</p>
-                <p className="text-sm font-medium">{order.paymentMethod?.toUpperCase()} | {order.paymentStatus}</p>
+                <p className="text-xs text-gray-500 mb-1">Payment</p>
+                {getPaymentBadge(order.paymentStatus, order.paymentMethod)}
               </div>
-              <div>
-                <p className="text-xs text-gray-500">Ward Number</p>
-                <p className="text-sm font-medium flex items-center gap-1">
-                  <FaHashtag className="text-gray-400" size={12} />
-                  Ward {order.wardId}
-                </p>
+            </div>
+
+            <div className="bg-blue-50 rounded-lg p-3 space-y-1.5 text-sm">
+              {loc.typedArea && (
+                <div className="flex items-start gap-2">
+                  <span className="text-gray-500 flex-shrink-0 w-20">Area:</span>
+                  <span className="font-bold text-orange-700 break-words">{loc.typedArea}</span>
+                </div>
+              )}
+              {loc.type === 'ward' && (
+                <div className="flex items-start gap-2">
+                  <span className="text-gray-500 flex-shrink-0 w-20">Ward:</span>
+                  <span className="font-bold text-blue-700 break-words">{loc.label} — {loc.name}</span>
+                </div>
+              )}
+              <div className="flex items-start gap-2">
+                <span className="text-gray-500 flex-shrink-0 w-20">Street:</span>
+                <span className="text-gray-700 break-words">{order.shippingAddress?.street || '—'}</span>
               </div>
-              <div>
-                <p className="text-xs text-gray-500">Ward Name</p>
-                <p className="text-sm font-medium flex items-center gap-1">
-                  <FaMapMarkerAlt className="text-gray-400" size={12} />
-                  {order.wardName || `Ward ${order.wardId}`}
-                </p>
+              <div className="flex items-start gap-2">
+                <span className="text-gray-500 flex-shrink-0 w-20">City:</span>
+                <span className="text-gray-700 break-words">{order.shippingAddress?.city || '—'}</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-gray-500 flex-shrink-0 w-20">State:</span>
+                <span className="text-gray-700 break-words">{order.shippingAddress?.state || '—'}</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-gray-500 flex-shrink-0 w-20">Postal Code:</span>
+                <span className="text-gray-700 break-words">{order.shippingAddress?.postalCode || '—'}</span>
+              </div>
+              <div className="flex items-start gap-2 pt-2 border-t border-blue-200">
+                <span className="text-gray-500 flex-shrink-0 w-20">Address:</span>
+                <span className="text-gray-800 font-medium break-words">{getFullAddress(order)}</span>
               </div>
             </div>
 
@@ -228,7 +358,6 @@ const Dashboard = () => {
               <div className="space-y-1 text-sm">
                 <p><span className="text-gray-500">Name:</span> {order.shippingAddress?.name || 'Customer'}</p>
                 <p><span className="text-gray-500">Phone:</span> {order.shippingAddress?.phone}</p>
-                <p><span className="text-gray-500">Address:</span> {order.shippingAddress?.street}, {order.shippingAddress?.city}</p>
               </div>
             </div>
 
@@ -250,11 +379,14 @@ const Dashboard = () => {
               </div>
             </div>
 
-            <div className="bg-gray-100 rounded-lg p-3">
-              <div className="flex justify-between items-center">
-                <span className="font-semibold">Total Amount</span>
-                <span className="text-xl font-bold text-[#ff0000]">{formatCurrency(order.finalAmount)}</span>
+            <div className="bg-gray-100 rounded-lg p-3 flex justify-between items-center">
+              <div>
+                <span className="font-semibold block">Total Amount</span>
+                <div className="mt-1">
+                  {getPaymentBadge(order.paymentStatus, order.paymentMethod)}
+                </div>
               </div>
+              <span className="text-xl font-bold text-[#ff0000]">{formatCurrency(order.finalAmount)}</span>
             </div>
           </div>
 
@@ -271,11 +403,38 @@ const Dashboard = () => {
     );
   };
 
-  // Order Card Component
-  const OrderCard = ({ order, type, onPickup, onDeliver, onView, isUpdating }) => {
+  const OrderCard = ({ order, type, onPickup, onDeliver, onMarkCodPaid, onView, isUpdating }) => {
+    const loc = getLocationDisplay(order);
+
+    // ✅ Strict flow conditions
+    const isCod = order.paymentMethod === 'cod';
+    const isPaid = order.paymentStatus === 'completed';
+    const isPickedUp = order.deliveryStatus === 'picked_up';
+    const isAssigned = order.deliveryStatus === 'assigned';
+    const isActive = type === 'active' && order.orderStatus !== 'cancelled';
+
+    // 1. Pickup: shown when assigned (not yet picked up)
+    const showPickupBtn = isActive && isAssigned;
+
+    // 2. Mark COD Paid: shown only after pickup, only for COD, only if not yet paid
+    const showCodPaidBtn =
+      isActive &&
+      isPickedUp &&
+      isCod &&
+      !isPaid &&
+      order.paymentStatus !== 'refunded';
+
+    // 3. Delivered: shown only after pickup,
+    //    for Razorpay: always allowed
+    //    for COD: only after payment is marked paid
+    const showDeliverBtn =
+      isActive &&
+      isPickedUp &&
+      (!isCod || isPaid);
+
     return (
       <div className="p-4 hover:bg-gray-50 transition-colors">
-        <div className="flex flex-wrap justify-between items-start mb-3">
+        <div className="flex flex-wrap justify-between items-start mb-3 gap-2">
           <div>
             <p className="text-sm font-medium text-gray-900">
               Order #{order.orderId || order._id?.slice(-8)}
@@ -289,37 +448,46 @@ const Dashboard = () => {
               }
             </p>
           </div>
-          {getStatusBadge(order.deliveryStatus, order.orderStatus)}
+          <div className="flex flex-col items-end gap-1.5">
+            {getStatusBadge(order.deliveryStatus, order.orderStatus)}
+            {getPaymentBadge(order.paymentStatus, order.paymentMethod)}
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3 text-sm bg-blue-50 p-3 rounded-lg">
-          <div className="flex items-center gap-2">
-            <FaHashtag className="text-blue-500" size={14} />
-            <span className="text-gray-500">Ward Number:</span>
-            <span className="font-bold text-blue-700 text-base">#{order.wardId}</span>
+        <div className="bg-blue-50 p-3 rounded-lg space-y-1.5 text-sm mb-3">
+          {loc.typedArea && (
+            <div className="flex items-start gap-2">
+              <span className="text-gray-500 flex-shrink-0 w-20">Area:</span>
+              <span className="font-bold text-orange-700 break-words">{loc.typedArea}</span>
+            </div>
+          )}
+          {loc.type === 'ward' && (
+            <div className="flex items-start gap-2">
+              <span className="text-gray-500 flex-shrink-0 w-20">Ward:</span>
+              <span className="font-bold text-blue-700 break-words">{loc.label} — {loc.name}</span>
+            </div>
+          )}
+          <div className="flex items-start gap-2">
+            <span className="text-gray-500 flex-shrink-0 w-20">Street:</span>
+            <span className="text-gray-700 break-words">{order.shippingAddress?.street || '—'}</span>
           </div>
-          <div className="flex items-center gap-2">
-            <FaMapMarkerAlt className="text-blue-500" size={14} />
-            <span className="text-gray-500">Ward Name:</span>
-            <span className="font-medium text-gray-700">{order.wardName || `Ward ${order.wardId}`}</span>
+          <div className="flex items-start gap-2">
+            <span className="text-gray-500 flex-shrink-0 w-20">City:</span>
+            <span className="text-gray-700 break-words">{order.shippingAddress?.city || '—'}</span>
           </div>
-          <div className="flex items-center gap-2 col-span-full">
-            <Phone size={14} className="text-gray-400" />
-            <span className="text-gray-500">Customer Phone:</span>
+          <div className="flex items-start gap-2 pt-2 border-t border-blue-200">
+            <span className="text-gray-500 flex-shrink-0 w-20">Address:</span>
+            <span className="text-gray-800 font-medium break-words">{getFullAddress(order)}</span>
+          </div>
+          <div className="flex items-start gap-2 pt-2 border-t border-blue-200">
+            <span className="text-gray-500 flex-shrink-0 w-20">Phone:</span>
             {type !== 'cancelled' ? (
-              <a href={`tel:${order.shippingAddress?.phone}`} className="text-[#ff0000] hover:underline">
+              <a href={`tel:${order.shippingAddress?.phone}`} className="text-[#ff0000] hover:underline break-all">
                 {order.shippingAddress?.phone}
               </a>
             ) : (
-              <span>{order.shippingAddress?.phone}</span>
+              <span className="break-all">{order.shippingAddress?.phone}</span>
             )}
-          </div>
-          <div className="flex items-center gap-2 col-span-full">
-            <MapPin size={14} className="text-gray-400" />
-            <span className="text-gray-500">Address:</span>
-            <span className="text-gray-700">
-              {order.shippingAddress?.street}, {order.shippingAddress?.city}
-            </span>
           </div>
         </div>
 
@@ -353,13 +521,14 @@ const Dashboard = () => {
           <div>
             <p className="text-xs text-gray-500">Total Amount</p>
             <p className="text-lg font-bold text-gray-800">{formatCurrency(order.finalAmount)}</p>
-            <p className="text-xs text-gray-500">
-              Payment: {order.paymentMethod?.toUpperCase()} | {order.paymentStatus}
-            </p>
+            <div className="mt-1">
+              {getPaymentBadge(order.paymentStatus, order.paymentMethod)}
+            </div>
           </div>
           
-          <div className="flex gap-2">
-            {type === 'active' && order.deliveryStatus === 'assigned' && (
+          <div className="flex gap-2 flex-wrap">
+            {/* 1. Picked Up */}
+            {showPickupBtn && (
               <button
                 onClick={() => onPickup(order._id)}
                 disabled={isUpdating === order._id}
@@ -373,8 +542,26 @@ const Dashboard = () => {
                 Picked Up
               </button>
             )}
-            
-            {type === 'active' && order.deliveryStatus === 'picked_up' && (
+
+            {/* 2. Mark COD Paid (only after pickup, only for COD, only if not paid) */}
+            {showCodPaidBtn && (
+              <button
+                onClick={() => onMarkCodPaid(order._id)}
+                disabled={isUpdating === order._id}
+                className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+                title="Confirm cash collected"
+              >
+                {isUpdating === order._id ? (
+                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                ) : (
+                  <FaMoneyBillWave size={14} />
+                )}
+                Mark COD Paid
+              </button>
+            )}
+
+            {/* 3. Delivered (only after pickup, and for COD only after payment done) */}
+            {showDeliverBtn && (
               <button
                 onClick={() => onDeliver(order._id)}
                 disabled={isUpdating === order._id}
@@ -415,7 +602,6 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white shadow">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
@@ -438,7 +624,6 @@ const Dashboard = () => {
       </header>
 
       <main className="p-4 sm:p-6">
-        {/* Refresh Button */}
         <div className="flex justify-end mb-4">
           <button
             onClick={() => fetchDashboardData(true)}
@@ -450,9 +635,7 @@ const Dashboard = () => {
           </button>
         </div>
 
-        {/* Stats Cards - 4 Cards including Cancelled */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          {/* Today's Deliveries */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <div className="flex justify-between items-center">
               <div>
@@ -465,7 +648,6 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Pending Orders */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <div className="flex justify-between items-center">
               <div>
@@ -478,7 +660,6 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Total Deliveries */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <div className="flex justify-between items-center">
               <div>
@@ -491,7 +672,6 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Cancelled Orders - ADDED */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <div className="flex justify-between items-center">
               <div>
@@ -505,10 +685,8 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Delivery Boy Profile Card - Full Info */}
         <div className="bg-gradient-to-r from-[#ff0000] to-[#cc0000] rounded-lg p-5 text-white mb-6 shadow-lg">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            {/* Left Side - Profile Info */}
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-3">
                 <div className="bg-white/20 p-3 rounded-full">
@@ -539,12 +717,28 @@ const Dashboard = () => {
                 </div>
               </div>
               
-              {/* Wards Assigned */}
-              <div className="mt-3 pt-2 border-t border-white/20">
-                <div className="flex flex-wrap items-center gap-2">
-                  <FaHashtag size={14} className="text-white/80" />
-                  <span className="text-white/90 text-sm">Assigned Wards:</span>
-                  {deliveryBoy?.wardIds?.length > 0 ? (
+              {deliveryBoy?.areas?.length > 0 && (
+                <div className="mt-3 pt-2 border-t border-white/20">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <FaMapMarkerAlt size={14} className="text-white/80" />
+                    <span className="text-white/90 text-sm">Assigned Cities:</span>
+                    <div className="flex flex-wrap gap-2">
+                      {deliveryBoy.areas.map((area, index) => (
+                        <span key={index} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-white/20 text-white">
+                          <FaMapMarkerAlt size={10} />
+                          {area}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {deliveryBoy?.wardIds?.length > 0 && (
+                <div className="mt-3 pt-2 border-t border-white/20">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <FaHashtag size={14} className="text-white/80" />
+                    <span className="text-white/90 text-sm">Assigned Wards:</span>
                     <div className="flex flex-wrap gap-2">
                       {deliveryBoy.wardIds.map((wardId, index) => (
                         <span key={index} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-white/20 text-white">
@@ -553,30 +747,30 @@ const Dashboard = () => {
                         </span>
                       ))}
                     </div>
-                  ) : (
-                    <span className="text-white/60 text-sm">No wards assigned</span>
+                  </div>
+                  {deliveryBoy?.wardNames?.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {deliveryBoy.wardNames.map((wardName, index) => (
+                        <span key={index} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-white/20 text-white">
+                          <FaMapMarkerAlt size={10} />
+                          {wardName.length > 30 ? wardName.substring(0, 30) + '...' : wardName}
+                        </span>
+                      ))}
+                    </div>
                   )}
                 </div>
-                {deliveryBoy?.wardNames?.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {deliveryBoy.wardNames.map((wardName, index) => (
-                      <span key={index} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-white/20 text-white">
-                        <FaMapMarkerAlt size={10} />
-                        {wardName.length > 30 ? wardName.substring(0, 30) + '...' : wardName}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
+              )}
+
+              {!deliveryBoy?.areas?.length && !deliveryBoy?.wardIds?.length && (
+                <div className="mt-3 pt-2 border-t border-white/20 text-white/60 text-sm">
+                  
+                </div>
+              )}
             </div>
-            
-            {/* Right Side - Status Badge */}
-            
           </div>
         </div>
 
-        {/* Tab Buttons */}
-        <div className="flex gap-3 mb-4">
+        <div className="flex gap-3 mb-4 flex-wrap">
           <button
             onClick={() => setActiveTab('active')}
             className={`px-4 py-2 rounded-lg font-medium transition flex items-center gap-2 ${
@@ -612,7 +806,6 @@ const Dashboard = () => {
           </button>
         </div>
 
-        {/* Active Orders Section */}
         {activeTab === 'active' && (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
@@ -639,6 +832,7 @@ const Dashboard = () => {
                     type="active"
                     onPickup={handlePickup}
                     onDeliver={handleDeliver}
+                    onMarkCodPaid={handleMarkCodPaid}
                     onView={viewOrderDetails}
                     isUpdating={updatingOrderId}
                   />
@@ -648,7 +842,6 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* Delivered Orders Section */}
         {activeTab === 'delivered' && (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-200 bg-green-50">
@@ -675,6 +868,7 @@ const Dashboard = () => {
                     type="delivered"
                     onPickup={handlePickup}
                     onDeliver={handleDeliver}
+                    onMarkCodPaid={handleMarkCodPaid}
                     onView={viewOrderDetails}
                     isUpdating={updatingOrderId}
                   />
@@ -684,7 +878,6 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* Cancelled Orders Section */}
         {activeTab === 'cancelled' && (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-200 bg-red-50">
@@ -711,6 +904,7 @@ const Dashboard = () => {
                     type="cancelled"
                     onPickup={handlePickup}
                     onDeliver={handleDeliver}
+                    onMarkCodPaid={handleMarkCodPaid}
                     onView={viewOrderDetails}
                     isUpdating={updatingOrderId}
                   />
@@ -721,7 +915,6 @@ const Dashboard = () => {
         )}
       </main>
 
-      {/* Order Details Modal */}
       {showOrderModal && (
         <OrderDetailsModal
           order={selectedOrder}
@@ -732,4 +925,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard; 
+export default Dashboard;
