@@ -254,6 +254,26 @@ const Dashboard = () => {
     return parts.length > 0 ? parts.join(', ') : '—';
   };
 
+  // ✅ Build a Google Maps directions URL from the order's address (no API key needed)
+  const getGoogleMapsUrl = (order) => {
+    if (!order?.shippingAddress) return '#';
+
+    const a = order.shippingAddress;
+    const parts = [
+      a.street,
+      order.typedArea,
+      a.city,
+      a.state,
+      a.postalCode,
+      a.country || 'India'
+    ].filter(Boolean);
+
+    const query = parts.join(', ').trim();
+    if (!query) return '#';
+
+    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(query)}`;
+  };
+
   // ✅ Resolve customer name consistently
   const getCustomerName = (order) =>
     order.name ||
@@ -353,6 +373,21 @@ const Dashboard = () => {
                 <span className="text-gray-500 flex-shrink-0 w-16 sm:w-20">Address:</span>
                 <span className="text-gray-800 font-medium break-words">{getFullAddress(order)}</span>
               </div>
+
+              {/* ✅ Open in Google Maps button inside modal */}
+              {order.shippingAddress && (
+                <div className="pt-2 mt-1 border-t border-blue-200">
+                  <a
+                    href={getGoogleMapsUrl(order)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-medium transition-colors"
+                  >
+                    <FaMapMarkerAlt size={13} />
+                    Open in Google Maps
+                  </a>
+                </div>
+              )}
             </div>
 
             {order.deliveryDeliveredAt && (
@@ -495,6 +530,22 @@ const Dashboard = () => {
               <span className="break-all">{order.shippingAddress?.phone}</span>
             )}
           </div>
+
+          {/* ✅ Open in Google Maps button */}
+          {order.shippingAddress && (
+            <div className="flex items-start gap-2 pt-2 border-t border-blue-200">
+              <span className="text-gray-500 flex-shrink-0 w-16 sm:w-20">Map:</span>
+              <a
+                href={getGoogleMapsUrl(order)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-[11px] sm:text-xs font-medium transition-colors"
+              >
+                <FaMapMarkerAlt size={11} />
+                Open in Google Maps
+              </a>
+            </div>
+          )}
 
           {loc.typedArea && (
             <div className="flex items-start gap-2">
