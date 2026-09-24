@@ -136,6 +136,13 @@ const Dashboard = () => {
     });
   };
 
+  // ✅ Format weight (250g / 1kg) — returns null if no weight
+  const formatWeight = (item) => {
+    if (!item?.weight || item.weight <= 0) return null;
+    const unit = item.weightUnit === 'gram' ? 'g' : item.weightUnit === 'kg' ? 'kg' : (item.weightUnit || 'g');
+    return `${item.weight}${unit}`;
+  };
+
   const getStatusBadge = (status, orderStatus) => {
     if (status === 'delivered' || orderStatus === 'delivered') {
       return <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Delivered</span>;
@@ -421,18 +428,25 @@ const Dashboard = () => {
             <div>
               <h3 className="font-medium text-sm sm:text-base text-gray-800 mb-2">Items ({order.products?.length || 0})</h3>
               <div className="space-y-2 max-h-48 overflow-y-auto">
-                {(order.products || []).map((item, idx) => (
-                  <div key={idx} className="flex justify-between items-center border-b pb-2">
-                    <div className="min-w-0 pr-2">
-                      <p className="font-medium text-xs sm:text-sm break-words">{item.name}</p>
-                      <p className="text-[11px] sm:text-xs text-gray-500">
-                        {item.quantity} x {formatCurrency(item.price)}
-                        {item.variantName && ` (${item.variantName})`}
-                      </p>
+                {(order.products || []).map((item, idx) => {
+                  const weight = formatWeight(item);
+                  return (
+                    <div key={idx} className="flex justify-between items-center border-b pb-2">
+                      <div className="min-w-0 pr-2">
+                        <p className="font-medium text-xs sm:text-sm break-words">{item.name}</p>
+                        {weight && (
+                          <p className="text-[11px] sm:text-xs text-gray-500">
+                            Weight: {weight}
+                          </p>
+                        )}
+                        <p className="text-[11px] sm:text-xs text-gray-500">
+                          {item.quantity} Quantity : {formatCurrency(item.price)}
+                        </p>
+                      </div>
+                      <p className="font-semibold text-xs sm:text-sm whitespace-nowrap">{formatCurrency(item.price * item.quantity)}</p>
                     </div>
-                    <p className="font-semibold text-xs sm:text-sm whitespace-nowrap">{formatCurrency(item.price * item.quantity)}</p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -578,15 +592,18 @@ const Dashboard = () => {
             Items ({order.products?.length || 0})
           </p>
           <div className="space-y-0.5">
-            {(order.products || []).slice(0, 2).map((item, idx) => (
-              <div key={idx} className="flex justify-between text-xs sm:text-sm gap-2">
-                <span className="text-gray-600 min-w-0 break-words">
-                  {item.quantity}x {item.name}
-                  {item.variantName && ` (${item.variantName})`}
-                </span>
-                <span className="font-medium whitespace-nowrap">{formatCurrency(item.price * item.quantity)}</span>
-              </div>
-            ))}
+            {(order.products || []).slice(0, 2).map((item, idx) => {
+              const weight = formatWeight(item);
+              return (
+                <div key={idx} className="flex justify-between text-xs sm:text-sm gap-2">
+                  <span className="text-gray-600 min-w-0 break-words">
+                    {item.quantity} Quantity : {item.name}
+                    {weight && ` (${weight})`}
+                  </span>
+                  <span className="font-medium whitespace-nowrap">{formatCurrency(item.price * item.quantity)}</span>
+                </div>
+              );
+            })}
             {order.products?.length > 2 && (
               <p className="text-[11px] sm:text-xs text-gray-400">+{order.products.length - 2} more items</p>
             )}
