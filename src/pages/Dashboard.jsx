@@ -104,7 +104,6 @@ const Dashboard = () => {
     }
   };
 
-  // ✅ Mark COD payment as received (no confirm)
   const handleMarkCodPaid = async (orderId) => {
     try {
       setUpdatingOrderId(orderId);
@@ -136,7 +135,6 @@ const Dashboard = () => {
     });
   };
 
-  // ✅ Format weight (250g / 1kg) — returns null if no weight
   const formatWeight = (item) => {
     if (!item?.weight || item.weight <= 0) return null;
     const unit = item.weightUnit === 'gram' ? 'g' : item.weightUnit === 'kg' ? 'kg' : (item.weightUnit || 'g');
@@ -261,27 +259,56 @@ const Dashboard = () => {
     return parts.length > 0 ? parts.join(', ') : '—';
   };
 
-  // ✅ Build a Google Maps directions URL from the order's address (no API key needed)
+  // ✅ Build a Google Maps directions URL
+  // 🎯 Priority 1: stored lat/lng (exact, from Geocoding API)
+  // 🎯 Priority 2: text fallback (pincode-first, deduped)
   const getGoogleMapsUrl = (order) => {
     if (!order?.shippingAddress) return '#';
 
     const a = order.shippingAddress;
-    const parts = [
-      a.street,
-      order.typedArea,
-      a.city,
-      a.state,
-      a.postalCode,
-      a.country || 'India'
-    ].filter(Boolean);
 
-    const query = parts.join(', ').trim();
-    if (!query) return '#';
+    // 🎯 Priority 1 — use stored coordinates if available (100% reliable)
+    if (a.latitude && a.longitude) {
+      return `https://www.google.com/maps/dir/?api=1&destination=${a.latitude},${a.longitude}`;
+    }
 
+    // 🎯 Priority 2 — text fallback for old orders without coordinates
+    const typed = (order.typedArea || '').trim();
+    const street = (a.street || '').trim();
+    const city = (a.city || '').trim();
+    const state = (a.state || '').trim();
+    const postal = (a.postalCode || '').trim();
+    const country = (a.country || 'India').trim();
+
+    const parts = [];
+
+    if (street) parts.push(street);
+
+    if (typed && !street.toLowerCase().includes(typed.toLowerCase())) {
+      parts.push(typed);
+    }
+
+    if (postal) parts.push(postal);
+    if (city) parts.push(city);
+    if (state) parts.push(state);
+    if (country) parts.push(country);
+
+    const seen = new Set();
+    const cleaned = [];
+    for (const p of parts) {
+      const key = p.toLowerCase().replace(/\s+/g, ' ').trim();
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        cleaned.push(p.replace(/\s+/g, ' ').trim());
+      }
+    }
+
+    if (cleaned.length === 0) return '#';
+
+    const query = cleaned.join(', ');
     return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(query)}`;
   };
 
-  // ✅ Resolve customer name consistently
   const getCustomerName = (order) =>
     order.name ||
     order.shippingAddress?.name ||
@@ -340,7 +367,6 @@ const Dashboard = () => {
             </div>
 
             <div className="bg-blue-50 rounded-lg p-2.5 sm:p-3 space-y-1.5 text-xs sm:text-sm">
-              {/* ✅ Customer Name */}
               <div className="flex items-start gap-2">
                 <span className="text-gray-500 flex-shrink-0 w-16 sm:w-20">Name:</span>
                 <span className="font-bold text-gray-900 break-words">
@@ -381,7 +407,6 @@ const Dashboard = () => {
                 <span className="text-gray-800 font-medium break-words">{getFullAddress(order)}</span>
               </div>
 
-              {/* ✅ Open in Google Maps button inside modal */}
               {order.shippingAddress && (
                 <div className="pt-2 mt-1 border-t border-blue-200">
                   <a
@@ -477,27 +502,19 @@ const Dashboard = () => {
   const OrderCard = ({ order, type, onPickup, onDeliver, onMarkCodPaid, onView, isUpdating }) => {
     const loc = getLocationDisplay(order);
 
-    // ✅ Strict flow conditions
     const isCod = order.paymentMethod === 'cod';
     const isPaid = order.paymentStatus === 'completed';
     const isPickedUp = order.deliveryStatus === 'picked_up';
     const isAssigned = order.deliveryStatus === 'assigned';
     const isActive = type === 'active' && order.orderStatus !== 'cancelled';
 
-    // 1. Pickup: shown when assigned (not yet picked up)
     const showPickupBtn = isActive && isAssigned;
-
-    // 2. Mark COD Paid: shown only after pickup, only for COD, only if not yet paid
     const showCodPaidBtn =
       isActive &&
       isPickedUp &&
       isCod &&
       !isPaid &&
       order.paymentStatus !== 'refunded';
-
-    // 3. Delivered: shown only after pickup,
-    //    for Razorpay: always allowed
-    //    for COD: only after payment is marked paid
     const showDeliverBtn =
       isActive &&
       isPickedUp &&
@@ -526,7 +543,6 @@ const Dashboard = () => {
         </div>
 
         <div className="bg-blue-50 p-2.5 sm:p-3 rounded-lg space-y-1.5 text-xs sm:text-sm mb-3">
-          {/* ✅ Customer Name */}
           <div className="flex items-start gap-2">
             <span className="text-gray-500 flex-shrink-0 w-16 sm:w-20">Name:</span>
             <span className="font-bold text-gray-900 break-words">
@@ -545,7 +561,6 @@ const Dashboard = () => {
             )}
           </div>
 
-          {/* ✅ Open in Google Maps button */}
           {order.shippingAddress && (
             <div className="flex items-start gap-2 pt-2 border-t border-blue-200">
               <span className="text-gray-500 flex-shrink-0 w-16 sm:w-20">Map:</span>
@@ -628,7 +643,6 @@ const Dashboard = () => {
           </div>
 
           <div className="flex gap-2 flex-wrap w-full sm:w-auto">
-            {/* 1. Picked Up */}
             {showPickupBtn && (
               <button
                 onClick={() => onPickup(order._id)}
@@ -644,7 +658,6 @@ const Dashboard = () => {
               </button>
             )}
 
-            {/* 2. Mark COD Paid */}
             {showCodPaidBtn && (
               <button
                 onClick={() => onMarkCodPaid(order._id)}
@@ -661,7 +674,6 @@ const Dashboard = () => {
               </button>
             )}
 
-            {/* 3. Delivered */}
             {showDeliverBtn && (
               <button
                 onClick={() => onDeliver(order._id)}
@@ -736,9 +748,7 @@ const Dashboard = () => {
           </button>
         </div>
 
-        {/* ✅ Compact stats — 4 in one row on mobile, larger on desktop */}
         <div className="grid grid-cols-4 gap-1.5 sm:gap-4 mb-4 sm:mb-6">
-          {/* Today's Deliveries */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-1.5 sm:p-4">
             <div className="flex flex-col items-center text-center sm:flex-row sm:justify-between sm:items-center sm:text-left">
               <div className="min-w-0 w-full sm:w-auto">
@@ -756,7 +766,6 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Pending Orders */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-1.5 sm:p-4">
             <div className="flex flex-col items-center text-center sm:flex-row sm:justify-between sm:items-center sm:text-left">
               <div className="min-w-0 w-full sm:w-auto">
@@ -773,7 +782,6 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Total Deliveries */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-1.5 sm:p-4">
             <div className="flex flex-col items-center text-center sm:flex-row sm:justify-between sm:items-center sm:text-left">
               <div className="min-w-0 w-full sm:w-auto">
@@ -790,7 +798,6 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Cancelled Orders */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-1.5 sm:p-4">
             <div className="flex flex-col items-center text-center sm:flex-row sm:justify-between sm:items-center sm:text-left">
               <div className="min-w-0 w-full sm:w-auto">
@@ -808,7 +815,6 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* ✅ Profile card */}
         <div className="bg-gradient-to-r from-[#ff0000] to-[#cc0000] rounded-lg p-3 sm:p-5 text-white mb-4 sm:mb-6 shadow-lg">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div className="flex-1 w-full">
@@ -833,7 +839,6 @@ const Dashboard = () => {
                   <span className="text-white/90 text-xs sm:text-sm">Email:</span>
                   <span className="text-white font-medium text-xs sm:text-sm truncate">{deliveryBoy?.email}</span>
                 </div>
-
                 <div className="flex items-center gap-2">
                   <FaCar size={12} className="sm:w-3.5 sm:h-3.5 text-white/80 flex-shrink-0" />
                   <span className="text-white/90 text-xs sm:text-sm">Vehicle:</span>
@@ -887,14 +892,12 @@ const Dashboard = () => {
 
               {!deliveryBoy?.areas?.length && !deliveryBoy?.wardIds?.length && (
                 <div className="mt-3 pt-2 border-t border-white/20 text-white/60 text-sm">
-
                 </div>
               )}
             </div>
           </div>
         </div>
 
-        {/* ✅ Tabs — compact on mobile */}
         <div className="flex gap-1.5 sm:gap-3 mb-3 sm:mb-4 flex-wrap">
           <button
             onClick={() => setActiveTab('active')}
