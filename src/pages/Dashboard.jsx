@@ -244,35 +244,71 @@ const Dashboard = () => {
   const getFullAddress = (order) => {
     if (!order.shippingAddress) return '—';
 
-    const parts = [];
+    const a = order.shippingAddress;
+    const street = (a.street || '').trim();
+    const city = (a.city || '').trim();
+    const state = (a.state || '').trim();
+    const postal = (a.postalCode || '').trim();
     const typed = (order.typedArea || '').trim();
-    const street = (order.shippingAddress.street || '').trim();
 
-    if (typed && !street.toLowerCase().includes(typed.toLowerCase())) {
-      parts.push(typed);
-    }
+    const streetLower = street.toLowerCase();
+
+    const streetHasCity = city && streetLower.includes(city.toLowerCase());
+    const streetHasState = state && streetLower.includes(state.toLowerCase());
+    const streetHasPostal = postal && streetLower.includes(postal);
+    const streetHasTyped = typed && streetLower.includes(typed.toLowerCase());
+
+    const parts = [];
+
+    if (typed && !streetHasTyped) parts.push(typed);
     if (street) parts.push(street);
-    if (order.shippingAddress.city) parts.push(order.shippingAddress.city);
-    if (order.shippingAddress.state) parts.push(order.shippingAddress.state);
-    if (order.shippingAddress.postalCode) parts.push(order.shippingAddress.postalCode);
+    if (city && !streetHasCity) parts.push(city);
+    if (state && !streetHasState) parts.push(state);
+    if (postal && !streetHasPostal) parts.push(postal);
 
     return parts.length > 0 ? parts.join(', ') : '—';
   };
+  // ✅ Get location source info for badge display
+  const getLocationSourceInfo = (order) => {
+    const source = order?.shippingAddress?.locationSource;
+    const hasCoords = !!(order?.shippingAddress?.latitude && order?.shippingAddress?.longitude);
+
+    if (source === 'customer_selected' && hasCoords) {
+      return {
+        label: '📍 Exact Pin',
+        color: 'bg-green-100 text-green-800 border-green-300',
+        trusted: true,
+      };
+    }
+    if (source === 'google_geocoded' && hasCoords) {
+      return {
+        label: '⚠️ Approximate',
+        color: 'bg-yellow-100 text-yellow-800 border-yellow-300',
+        trusted: false,
+      };
+    }
+    return {
+      label: '📄 Text Only',
+      color: 'bg-gray-100 text-gray-700 border-gray-300',
+      trusted: false,
+    };
+  };
 
   // ✅ Build a Google Maps directions URL
-  // 🎯 Priority 1: stored lat/lng (exact, from Geocoding API)
-  // 🎯 Priority 2: text fallback (pincode-first, deduped)
+  // 🎯 TRUST only customer_selected coordinates
+  // 🎯 Fall back to text address for geocoded / old orders
   const getGoogleMapsUrl = (order) => {
     if (!order?.shippingAddress) return '#';
 
     const a = order.shippingAddress;
+    const hasCoords = !!(a.latitude && a.longitude);
 
-    // 🎯 Priority 1 — use stored coordinates if available (100% reliable)
-    if (a.latitude && a.longitude) {
+    // 🎯 Priority 1 — use coordinates ONLY if customer pinned them
+    if (hasCoords && a.locationSource === 'customer_selected') {
       return `https://www.google.com/maps/dir/?api=1&destination=${a.latitude},${a.longitude}`;
     }
 
-    // 🎯 Priority 2 — text fallback for old orders without coordinates
+    // 🎯 Priority 2 — text fallback for geocoded / old orders (deduped)
     const typed = (order.typedArea || '').trim();
     const street = (a.street || '').trim();
     const city = (a.city || '').trim();
@@ -280,18 +316,15 @@ const Dashboard = () => {
     const postal = (a.postalCode || '').trim();
     const country = (a.country || 'India').trim();
 
+    const streetLower = street.toLowerCase();
     const parts = [];
 
     if (street) parts.push(street);
-
-    if (typed && !street.toLowerCase().includes(typed.toLowerCase())) {
-      parts.push(typed);
-    }
-
-    if (postal) parts.push(postal);
-    if (city) parts.push(city);
-    if (state) parts.push(state);
-    if (country) parts.push(country);
+    if (typed && !streetLower.includes(typed.toLowerCase())) parts.push(typed);
+    if (postal && !streetLower.includes(postal)) parts.push(postal);
+    if (city && !streetLower.includes(city.toLowerCase())) parts.push(city);
+    if (state && !streetLower.includes(state.toLowerCase())) parts.push(state);
+    if (country && !streetLower.includes(country.toLowerCase())) parts.push(country);
 
     const seen = new Set();
     const cleaned = [];
@@ -328,6 +361,9 @@ const Dashboard = () => {
     if (!order) return null;
 
     const loc = getLocationDisplay(order);
+    const sourceInfo = getLocationSourceInfo(order);
+    const landmark = order.shippingAddress?.landmark;
+    const altPhone = order.shippingAddress?.alternatePhone?.trim();
 
     return (
       <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-2 sm:p-4 z-50">
@@ -374,6 +410,14 @@ const Dashboard = () => {
                 </span>
               </div>
 
+              {/* ✅ Location source badge */}
+              <div className="flex items-start gap-2">
+                <span className="text-gray-500 flex-shrink-0 w-16 sm:w-20">Location:</span>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold uppercase tracking-wide border ${sourceInfo.color}`}>
+                  {sourceInfo.label}
+                </span>
+              </div>
+
               {loc.typedArea && (
                 <div className="flex items-start gap-2">
                   <span className="text-gray-500 flex-shrink-0 w-16 sm:w-20">Area:</span>
@@ -402,6 +446,15 @@ const Dashboard = () => {
                 <span className="text-gray-500 flex-shrink-0 w-16 sm:w-20">Postal Code:</span>
                 <span className="text-gray-700 break-words">{order.shippingAddress?.postalCode || '—'}</span>
               </div>
+
+              {/* ✅ Landmark row */}
+              {landmark && (
+                <div className="flex items-start gap-2 pt-2 border-t border-blue-200">
+                  <span className="text-gray-500 flex-shrink-0 w-16 sm:w-20">Landmark:</span>
+                  <span className="font-bold text-orange-700 break-words">🚩 {landmark}</span>
+                </div>
+              )}
+
               <div className="flex items-start gap-2 pt-2 border-t border-blue-200">
                 <span className="text-gray-500 flex-shrink-0 w-16 sm:w-20">Address:</span>
                 <span className="text-gray-800 font-medium break-words">{getFullAddress(order)}</span>
@@ -444,6 +497,17 @@ const Dashboard = () => {
                   <span className="font-medium">{getCustomerName(order)}</span>
                 </p>
                 <p><span className="text-gray-500">Phone:</span> {order.shippingAddress?.phone}</p>
+
+                {/* ✅ Alternate phone — only if provided */}
+                {altPhone && (
+                  <p>
+                    <span className="text-gray-500">Alt Phone:</span>{' '}
+                    <a href={`tel:${altPhone}`} className="text-[#ff0000] hover:underline">
+                      {altPhone}
+                    </a>
+                  </p>
+                )}
+
                 {order.shippingAddress?.email && (
                   <p><span className="text-gray-500">Email:</span> {order.shippingAddress.email}</p>
                 )}
@@ -501,6 +565,9 @@ const Dashboard = () => {
 
   const OrderCard = ({ order, type, onPickup, onDeliver, onMarkCodPaid, onView, isUpdating }) => {
     const loc = getLocationDisplay(order);
+    const sourceInfo = getLocationSourceInfo(order);
+    const landmark = order.shippingAddress?.landmark;
+    const altPhone = order.shippingAddress?.alternatePhone?.trim();
 
     const isCod = order.paymentMethod === 'cod';
     const isPaid = order.paymentStatus === 'completed';
@@ -561,6 +628,28 @@ const Dashboard = () => {
             )}
           </div>
 
+          {/* ✅ Alternate phone — only if provided */}
+          {altPhone && (
+            <div className="flex items-start gap-2">
+              <span className="text-gray-500 flex-shrink-0 w-16 sm:w-20">Alt Phone:</span>
+              {type !== 'cancelled' ? (
+                <a href={`tel:${altPhone}`} className="text-[#ff0000] hover:underline break-all">
+                  {altPhone}
+                </a>
+              ) : (
+                <span className="break-all">{altPhone}</span>
+              )}
+            </div>
+          )}
+
+          {/* ✅ Location source badge */}
+          <div className="flex items-start gap-2">
+            <span className="text-gray-500 flex-shrink-0 w-16 sm:w-20">Location:</span>
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold uppercase tracking-wide border ${sourceInfo.color}`}>
+              {sourceInfo.label}
+            </span>
+          </div>
+
           {order.shippingAddress && (
             <div className="flex items-start gap-2 pt-2 border-t border-blue-200">
               <span className="text-gray-500 flex-shrink-0 w-16 sm:w-20">Map:</span>
@@ -596,6 +685,15 @@ const Dashboard = () => {
             <span className="text-gray-500 flex-shrink-0 w-16 sm:w-20">City:</span>
             <span className="text-gray-700 break-words">{order.shippingAddress?.city || '—'}</span>
           </div>
+
+          {/* ✅ Landmark row */}
+          {landmark && (
+            <div className="flex items-start gap-2 pt-2 border-t border-blue-200">
+              <span className="text-gray-500 flex-shrink-0 w-16 sm:w-20">Landmark:</span>
+              <span className="font-bold text-orange-700 break-words">🚩 {landmark}</span>
+            </div>
+          )}
+
           <div className="flex items-start gap-2 pt-2 border-t border-blue-200">
             <span className="text-gray-500 flex-shrink-0 w-16 sm:w-20">Address:</span>
             <span className="text-gray-800 font-medium break-words">{getFullAddress(order)}</span>
